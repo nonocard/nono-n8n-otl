@@ -1,0 +1,20 @@
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	# Anónimo para el healthcheck de Railway
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	handle {
+		basic_auth {
+			{$UI_USERNAME} {$UI_PASSWORD_HASH}
+		}
+		reverse_proxy {$JAEGER_UPSTREAM}
+	}
+
+	header -Server
+}
