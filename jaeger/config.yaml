@@ -1,4 +1,5 @@
 # Jaeger v2 single-node: OTLP in -> Badger (volumen) -> Query/UI
+# + span_metrics -> :8889 (Prometheus lo scrapea) -> pestaña Monitor (SPM).
 # Todo escucha en [::] para la red privada de Railway (IPv6/dual-stack).
 # Este servicio NO debe tener dominio público.
 
@@ -8,7 +9,10 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [jaeger_storage_exporter]
+      exporters: [jaeger_storage_exporter, span_metrics]
+    metrics/span_metrics:
+      receivers: [span_metrics]
+      exporters: [prometheus]
   telemetry:
     resource:
       service.name: jaeger
@@ -27,6 +31,7 @@ extensions:
   jaeger_query:
     storage:
       traces: badger_main
+      metrics: prom_main
     http:
       endpoint: "[::]:16686"
     grpc:
@@ -41,7 +46,24 @@ extensions:
             values: "/data/badger/values"
           ephemeral: false
           ttl:
-            spans: ${env:SPAN_TTL:-168h}
+            spans: ${env:SPAN_TTL:-720h}
+    metric_backends:
+      prom_main:
+        prometheus:
+          endpoint: ${env:PROMETHEUS_URL:-http://prometheus.railway.internal:9090}
+          normalize_calls: true
+          normalize_duration: true
+
+connectors:
+  # RED metrics (calls, errors, duración) por service/span.name/kind/status.
+  # Cuando confirmemos el atributo de workflow que emite n8n, agregarlo en
+  # dimensions para agrupar por workflow.
+  span_metrics:
+    metrics_flush_interval: 60s
+    histogram:
+      explicit:
+        # Ejecuciones de n8n van de ms a minutos; los buckets default topan en 15s.
+        buckets: [10ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, 30s, 60s, 120s, 300s, 600s]
 
 receivers:
   otlp:
@@ -57,3 +79,5 @@ processors:
 exporters:
   jaeger_storage_exporter:
     trace_storage: badger_main
+  prometheus:
+    endpoint: "[::]:8889"
