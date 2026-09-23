@@ -1,0 +1,10 @@
+# Scrapea las métricas RED que genera spanmetrics en jaeger.
+# Solo red privada: este servicio NO debe tener dominio público.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: aggregated-trace-metrics
+    static_configs:
+      - targets: ["jaeger.railway.internal:8889"]
