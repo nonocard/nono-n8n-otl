@@ -1,0 +1,54 @@
+# OTel Collector (contrib) delante de Jaeger: n8n -> :4318 -> transform -> jaeger:4317.
+# Existe porque el binario de Jaeger no trae el processor `transform`.
+# n8n nombra todos sus spans "workflow.execute" / "node.execute"; aquí se
+# renombran con el nombre del workflow y del nodo. El nombre original queda
+# en el atributo n8n.span.type (workflow|node) para poder filtrar por tag.
+# Solo red privada: este servicio NO debe tener dominio público.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "[::]:4317"
+      http:
+        endpoint: "[::]:4318"
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  transform/n8n_names:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["n8n.span.type"], "workflow") where name == "workflow.execute"
+          - set(attributes["n8n.span.type"], "node") where name == "node.execute"
+          - set(name, attributes["n8n.workflow.name"]) where name == "workflow.execute" and attributes["n8n.workflow.name"] != nil and attributes["n8n.workflow.name"] != ""
+          - set(name, attributes["n8n.node.name"]) where name == "node.execute" and attributes["n8n.node.name"] != nil and attributes["n8n.node.name"] != ""
+
+  batch: {}
+
+exporters:
+  otlp_grpc/jaeger:
+    endpoint: ${env:JAEGER_OTLP_ENDPOINT:-jaeger.railway.internal:4317}
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+    endpoint: "[::]:13133"
+    path: "/status"
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/n8n_names, batch]
+      exporters: [otlp_grpc/jaeger]
+  telemetry:
+    logs:
+      level: info

@@ -56,10 +56,14 @@ extensions:
 
 connectors:
   # RED metrics (calls, errors, duración) por service/span.name/kind/status.
-  # Cuando confirmemos el atributo de workflow que emite n8n, agregarlo en
-  # dimensions para agrupar por workflow.
+  # El otel-collector renombra los spans de n8n (span.name = nombre del
+  # workflow o del nodo), así que Monitor ya agrupa por workflow/nodo.
+  # n8n.span.type y n8n.node.type quedan como labels extra en Prometheus.
   span_metrics:
     metrics_flush_interval: 60s
+    dimensions:
+      - name: n8n.span.type
+      - name: n8n.node.type
     histogram:
       explicit:
         # Ejecuciones de n8n van de ms a minutos; los buckets default topan en 15s.
